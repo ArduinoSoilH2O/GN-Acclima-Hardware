@@ -1,5 +1,5 @@
 
-/*SRE Cellular Gateway 
+/*ARS Cellular Gateway 
 
    Main Components:
       - ATMega1284P with MoteinoMEGA core
