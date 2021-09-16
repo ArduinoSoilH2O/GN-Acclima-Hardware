@@ -33,7 +33,7 @@
    Justin Ayres, Univeristy of Maryland Computer Science Department
    John Anderson, Acclima Inc.
 
-   Last edited: September 2, 2021
+   Last edited: September 15, 2021
 
    - Version History -
 
@@ -67,6 +67,7 @@
    Version 2021.08.09 Set defaults for debug and recvMode if there is no info in EEPROM
    Version 2021.08.30 Print gateway data string in Receiver Mode 
    Version 2021.09.02 Print gateway data every upload interval instead of measurement interval
+   Version 2021.09.15 Add ifdefs for including lat/long, PEC, VWC conversion
 */
 
 //===================================================================================================
@@ -111,9 +112,11 @@
 #define SOLAR_CALIB         1.0          //This will become a EEPROM constant that is set during factory config – for now just use 1.0
 #define ADC_MAXVALUE        1023
 
+#define include_latlng
+
 // ------- Declare Variables -----------------------------------------------
 
-char VERSION[] = "V2021.09.02";
+char VERSION[] = "V2021.09.15";
 
 //-----*** Site/Gateway Identifier ***-----
 
@@ -1414,9 +1417,14 @@ void gatewayInfo(){
   }
   pv_dec[2] = 0;
 
-  //  char gData[65];                           // array for Gateway data, compiled below
   char gData[90];
-  sprintf(gData, "%s~%s~%s,%s~%lu~%d.%s~%d.%s~%d~%d.%s~%s", VERSION, projectID, lat, lng, serNum, battV_whole, bv_dec, boxTemp_whole, bt_dec, pvCurrent, pvV_whole, pv_dec, timeSave);
+  
+  #ifdef include_latlng  
+    sprintf(gData, "%s~%s~%s,%s~%lu~%d.%s~%d.%s~%d~%d.%s~%s", VERSION, projectID, lat, lng, serNum, battV_whole, bv_dec, boxTemp_whole, bt_dec, pvCurrent, pvV_whole, pv_dec, timeSave);
+  #else
+    sprintf(gData, "%s~%s~%lu~%d.%s~%d.%s~%d~%d.%s~%s", VERSION, projectID, serNum, battV_whole, bv_dec, boxTemp_whole, bt_dec, pvCurrent, pvV_whole, pv_dec, timeSave);
+  #endif
+                             
   Serial.println(gData);
   
   if (!SD.begin(SD_CS)) {}
@@ -1512,8 +1520,13 @@ void sendDataSD() {
 
   //  char gData[65];                           // array for Gateway data, compiled below
   char gData[90];
-  sprintf(gData, "%s~%s~%s,%s~%lu~%d.%s~%d.%s~%d~%d.%s~%s", VERSION, projectID, lat, lng, serNum, battV_whole, bv_dec, boxTemp_whole, bt_dec, pvCurrent, pvV_whole, pv_dec, timeSave);
-
+  
+  #ifdef include_latlng  
+    sprintf(gData, "%s~%s~%s,%s~%lu~%d.%s~%d.%s~%d~%d.%s~%s", VERSION, projectID, lat, lng, serNum, battV_whole, bv_dec, boxTemp_whole, bt_dec, pvCurrent, pvV_whole, pv_dec, timeSave);
+  #else
+    sprintf(gData, "%s~%s~%lu~%d.%s~%d.%s~%d~%d.%s~%s", VERSION, projectID, serNum, battV_whole, bv_dec, boxTemp_whole, bt_dec, pvCurrent, pvV_whole, pv_dec, timeSave);
+  #endif
+  
   if (!SD.begin(SD_CS)) {}
   delay(20);
   
@@ -1575,8 +1588,12 @@ void sendDataSD() {
       answer = sendATcommand(sendtcp, ">", 10000);
 
       // compile json with Gateway data to send to Hologram
-      sprintf(aux_str, "{\"k\":\"%s\",\"d\":\"%s~%s~%s,%s~%lu~%d.%s~%d.%s~%d~%d.%s~%s~%d\",\"t\":[\"%lu\",\"GATEWAY_DATA\"]}%s\r\n\r\n", devicekey, VERSION, projectID, lat, lng, serNum, battV_whole, bv_dec, boxTemp_whole, bt_dec, pvCurrent, pvV_whole, pv_dec, timeSave, dBm, serNum, ctrlZ);
-
+      #ifdef include_latlng
+        sprintf(aux_str, "{\"k\":\"%s\",\"d\":\"%s~%s~%s,%s~%lu~%d.%s~%d.%s~%d~%d.%s~%s~%d\",\"t\":[\"%lu\",\"GATEWAY_DATA\"]}%s\r\n\r\n", devicekey, VERSION, projectID, lat, lng, serNum, battV_whole, bv_dec, boxTemp_whole, bt_dec, pvCurrent, pvV_whole, pv_dec, timeSave, dBm, serNum, ctrlZ);
+      #else
+        sprintf(aux_str, "{\"k\":\"%s\",\"d\":\"%s~%s~%lu~%d.%s~%d.%s~%d~%d.%s~%s~%d\",\"t\":[\"%lu\",\"GATEWAY_DATA\"]}%s\r\n\r\n", devicekey, VERSION, projectID, serNum, battV_whole, bv_dec, boxTemp_whole, bt_dec, pvCurrent, pvV_whole, pv_dec, timeSave, dBm, serNum, ctrlZ);
+      #endif  
+      
       delay(60);
       if(debug){
         Serial.println();
@@ -1852,8 +1869,12 @@ void sendDataArray() {
       char timeSave[len1];
       Timestamp.toCharArray(timeSave, len1); delay(20);
 
-      sprintf(aux_str, "{\"k\":\"%s\",\"d\":\"%s~%s~%s,%s~%lu~%d.%s~%d.%s~%d~%d.%s~%s~-%d\",\"t\":[\"%lu\",\"GATEWAY_DATA\"]}%s\r\n\r\n", devicekey, VERSION, projectID, lat, lng, serNum, battV_whole, bv_dec, boxTemp_whole, bt_dec, pvCurrent, pvV_whole, pv_dec, timeSave, dBm, serNum, ctrlZ);
-  
+      #ifdef include_latlng
+        sprintf(aux_str, "{\"k\":\"%s\",\"d\":\"%s~%s~%s,%s~%lu~%d.%s~%d.%s~%d~%d.%s~%s~-%d\",\"t\":[\"%lu\",\"GATEWAY_DATA\"]}%s\r\n\r\n", devicekey, VERSION, projectID, lat, lng, serNum, battV_whole, bv_dec, boxTemp_whole, bt_dec, pvCurrent, pvV_whole, pv_dec, timeSave, dBm, serNum, ctrlZ);
+      #else
+        sprintf(aux_str, "{\"k\":\"%s\",\"d\":\"%s~%s~%lu~%d.%s~%d.%s~%d~%d.%s~%s~-%d\",\"t\":[\"%lu\",\"GATEWAY_DATA\"]}%s\r\n\r\n", devicekey, VERSION, projectID, serNum, battV_whole, bv_dec, boxTemp_whole, bt_dec, pvCurrent, pvV_whole, pv_dec, timeSave, dBm, serNum, ctrlZ);
+      #endif
+      
       delay(60);
       if(debug) {
         Serial.println();
@@ -2154,7 +2175,6 @@ boolean startGPRS(boolean onoff) {
 
   }
 }
-
 
 void printNetStat() {
   Serial.print(F("Network status "));
@@ -2467,9 +2487,11 @@ void MainMenu()
   EEPROM.get(EEPROM_NODEIDS, NodeIDs);
   interval = EEPROM.read(EEPROM_ALRM1_INT);
 
-  EEPROM.get(EEPROM_LAT, lat);
-  EEPROM.get(EEPROM_LNG, lng);
-
+  #ifdef include_latlng
+    EEPROM.get(EEPROM_LAT, lat);
+    EEPROM.get(EEPROM_LNG, lng);
+  #endif
+  
   recvMode = EEPROM.read(EEPROM_RECVMODE);
   debug = EEPROM.read(EEPROM_DEBUG);
   delay(30);
@@ -2491,10 +2513,12 @@ void MainMenu()
   Serial.println(LoRaFREQ);
   Serial.print(F("Project ID: "));
   Serial.println(projectID);
-  Serial.print(F("Lat/long: "));
-  Serial.print(lat);
-  Serial.print(",");
-  Serial.println(lng);
+  #ifdef include_latlng
+    Serial.print(F("Lat/long: "));
+    Serial.print(lat);
+    Serial.print(",");
+    Serial.println(lng);
+  #endif
   Serial.print(F("Gateway Radio ID: "));
   Serial.println(GatewayID);
   if(!recvMode){
@@ -2577,7 +2601,9 @@ void MainMenu()
   Serial.println(F("Configuration Options:"));
   Serial.println(F("  0  <--  Enter configuration string"));    // 25-Feb-2020: enter config info all at once 
   Serial.println(F("  i  <--  Enter project ID"));                      // set siteID
-  Serial.println(F("  l  <--  Enter or erase Lat/Long values"));
+  #ifdef include_latlng
+    Serial.println(F("  l  <--  Enter or erase Lat/Long values"));  
+  #endif
   Serial.println(F("  g  <--  Change Gateway radio ID"));
   if(!recvMode) Serial.println(F("  d  <--  Enter Hologram Device Key"));
   Serial.println(F("  n  <--  Enter Node radio IDs"));
@@ -2775,9 +2801,7 @@ void MainMenu()
 
     case 109: case 77:        //--------- m - Set measurement interval----------------------------
       Serial.println();
-      if (!measureInt() && !recvMode) {
-        Serial.println(F("ERROR: upload interval must be entered first. Returning to menu..."));
-      }
+      measureInt();
       delay(500);
       MainMenu();
       break;
@@ -3029,7 +3053,12 @@ void decodeConfig(char config_string[80]) {
     }
   }
 
-  if (commaCount < 9) {
+  byte maxCommas;
+  #ifdef include_latlng maxCommas = 9;
+  #else maxCommas = 7; 
+  #endif
+  
+  if (commaCount < maxCommas) {
     Serial.println("ERROR: Incomplete configuration string!");
     configOK = false;
   }
@@ -3063,16 +3092,10 @@ void decodeConfig(char config_string[80]) {
 
     uint8_t SerNum[8];
 
-    //  if(!use_siteID){
-    //    for (byte i = 0; i < 8; i++){
-    //      SerNum[i] = configG[i] - 48;
-    //    }
-    //  } else {
     for (byte j = 0; j < 8; j++) {
       SerNum[j] = configG[j + commaPos[0] + 1] - 48;
       //      Serial.print(SerNum[j]);
     }
-    //  }
 
     uint32_t serNumCheck = 0;
 
@@ -3150,26 +3173,24 @@ void decodeConfig(char config_string[80]) {
       Serial.println(NodeIDs[i]);
     }
 
-    //  if(!use_siteID){
-    //    if((commaCount - 5) != numNodes){
-    //      Serial.println("ERROR: Incorrect number of radio IDs"); // too many or too few radio IDs listed
-    //      configOK = false;
-    //    }
-    //  } else {
-    //     if((commaCount - 6) != numNodes){
-    if ((commaCount - 8) != numNodes) { // if adding lat/long at end
+    byte nodeCheck;
+    #ifdef include_latlng nodeCheck = commaCount - 8;
+    #else nodeCheck = commaCount - 6; 
+    #endif
+    
+    if (nodeCheck != numNodes) { 
       Serial.println("ERROR: Incorrect number of radio IDs"); // too many or too few radio IDs listed
       configOK = false;
-    }
-    //  }
+    }  
 
     //--- get measurement interval
 
     byte lastComma = commaCount - 1;
-    //  interval = 10 * (configG[commaPos[lastComma - 1] + 1] - 48) + (configG[commaPos[lastComma - 1] + 2] - 48);
 
     //if adding lat/long at end, decrement commaPos by 2
-    interval = 10 * (configG[commaPos[lastComma - 3] + 1] - 48) + (configG[commaPos[lastComma - 3] + 2] - 48);
+    #ifdef include_latlng interval = 10 * (configG[commaPos[lastComma - 3] + 1] - 48) + (configG[commaPos[lastComma - 3] + 2] - 48);
+    #else interval = 10 * (configG[commaPos[lastComma - 1] + 1] - 48) + (configG[commaPos[lastComma - 1] + 2] - 48); 
+    #endif
 
     Serial.print("interval: ");
     Serial.println(interval);
@@ -3181,10 +3202,10 @@ void decodeConfig(char config_string[80]) {
 
     //--- get upload interval
 
-    //  uploadInt = configG[commaPos[lastComma] + 1] - 48;
-
     //if adding lat/long at end, decrement commaPos by 2
-    uploadInt = configG[commaPos[lastComma - 2] + 1] - 48;
+    #ifdef include_latlng uploadInt = configG[commaPos[lastComma - 2] + 1] - 48;
+    #else uploadInt = configG[commaPos[lastComma] + 1] - 48; 
+    #endif
 
     Serial.print("uploadInt: ");
     Serial.println(uploadInt);
@@ -3197,85 +3218,87 @@ void decodeConfig(char config_string[80]) {
       configOK = false;
     }
 
-    //--- get lat
-
-    for (byte i = 0; i < 12; i++) {
-      char a = configG[commaPos[lastComma - 1] + i + 1];
-      if (a != ',') {
-        lat[i] = a;
-      } else {
-        lat[i] = 0;
-        break;
+    #ifdef include_latlng
+    
+      //--- get lat
+  
+      for (byte i = 0; i < 12; i++) {
+        char a = configG[commaPos[lastComma - 1] + i + 1];
+        if (a != ',') {
+          lat[i] = a;
+        } else {
+          lat[i] = 0;
+          break;
+        }
       }
-    }
-    // count # digits after decimal
-    byte digits = 0;
-    byte decLoc = 0;
-    for (byte j = 0; j < 12; j++) {
-      if (lat[j] == '.') {
-        decLoc = j;
-        break;
+      // count # digits after decimal
+      byte digits = 0;
+      byte decLoc = 0;
+      for (byte j = 0; j < 12; j++) {
+        if (lat[j] == '.') {
+          decLoc = j;
+          break;
+        }
       }
-    }
-    for (byte i = 1; i < 7; i++) {
-      if (lat[decLoc + i] >= '0') {
-        digits++;
+      for (byte i = 1; i < 7; i++) {
+        if (lat[decLoc + i] >= '0') {
+          digits++;
+        }
       }
-    }
-
-    if (digits != 6 || (lat[0] != '-' && (lat[2] != '.' && lat[1] != '.' && lat[3] != '.')) || (lat[0] == '-' && (lat[3] != '.' && lat[2] != '.' && lat[4] != '.'))) {
-      Serial.println(F("ERROR: Latitude incorrect!"));
-      lat[0] = '-';
-      for (byte i = 1; i < 12; i++) {
-        lat[i] = '9';
+  
+      if (digits != 6 || (lat[0] != '-' && (lat[2] != '.' && lat[1] != '.' && lat[3] != '.')) || (lat[0] == '-' && (lat[3] != '.' && lat[2] != '.' && lat[4] != '.'))) {
+        Serial.println(F("ERROR: Latitude incorrect!"));
+        lat[0] = '-';
+        for (byte i = 1; i < 12; i++) {
+          lat[i] = '9';
+        }
+        lat[11] = 0;
       }
-      lat[11] = 0;
-    }
-
-    Serial.print("Lat: ");
-    Serial.println(lat);
-
-    //--- get long
-
-    for (byte i = 0; i < 12; i++) {
-      char a = configG[commaPos[lastComma] + i + 1];
-      if (a > 44 && a < 58) {
-        lng[i] = a;
-      } else {
-        lng[i] = 0;
-        break;
+  
+      Serial.print("Lat: ");
+      Serial.println(lat);
+  
+      //--- get long
+  
+      for (byte i = 0; i < 12; i++) {
+        char a = configG[commaPos[lastComma] + i + 1];
+        if (a > 44 && a < 58) {
+          lng[i] = a;
+        } else {
+          lng[i] = 0;
+          break;
+        }
       }
-    }
-
-    // count # digits after decimal
-    digits = 0;
-    decLoc = 0;
-    for (byte j = 0; j < 12; j++) {
-      if (lng[j] == '.') {
-        decLoc = j;
-        break;
+  
+      // count # digits after decimal
+      digits = 0;
+      decLoc = 0;
+      for (byte j = 0; j < 12; j++) {
+        if (lng[j] == '.') {
+          decLoc = j;
+          break;
+        }
       }
-    }
-    for (byte i = 1; i < 7; i++) {
-      if (lng[decLoc + i] >= '0') {
-        digits++;
+      for (byte i = 1; i < 7; i++) {
+        if (lng[decLoc + i] >= '0') {
+          digits++;
+        }
       }
-    }
-
-    if (digits != 6 || (lng[0] != '-' && (lng[2] != '.' && lng[1] != '.' && lng[3] != '.')) || (lng[0] == '-' && (lng[3] != '.' && lng[2] != '.' && lng[4] != '.'))) {
-      Serial.println(F("ERROR: Longitude incorrect!"));
-      lng[0] = '-';
-      for (byte i = 1; i < 12; i++) {
-        lng[i] = '9';
+  
+      if (digits != 6 || (lng[0] != '-' && (lng[2] != '.' && lng[1] != '.' && lng[3] != '.')) || (lng[0] == '-' && (lng[3] != '.' && lng[2] != '.' && lng[4] != '.'))) {
+        Serial.println(F("ERROR: Longitude incorrect!"));
+        lng[0] = '-';
+        for (byte i = 1; i < 12; i++) {
+          lng[i] = '9';
+        }
+        lng[11] = 0;
       }
-      lng[11] = 0;
-    }
-
-    Serial.print("Long: ");
-    Serial.println(lng);
-
+  
+      Serial.print("Long: ");
+      Serial.println(lng);
+    #endif
   }
-
+ 
   if (!configOK) {
     Serial.println("!!! FAIL: Invalid configuration !!!");
   } else {
@@ -3296,9 +3319,10 @@ void decodeConfig(char config_string[80]) {
     EEPROM.put(EEPROM_NODEIDS, NodeIDs);
     EEPROM.update(EEPROM_ALRM1_INT, interval);
     if(!recvMode) EEPROM.update(EEPROM_ALRM2_INT, uploadInt);
-    EEPROM.put(EEPROM_LAT, lat);
-    EEPROM.put(EEPROM_LNG, lng);
-
+    #ifdef include_latlng
+      EEPROM.put(EEPROM_LAT, lat);
+      EEPROM.put(EEPROM_LNG, lng);
+    #endif
   }
 
 }
@@ -3404,67 +3428,24 @@ void uploadInterval() {
   delay(20);
 }
 
-boolean measureInt() {
-
-  if (uploadInt == 4) {
-    Serial.print(F("Enter measurement interval (10, 15, 20, 30, or 60 mins): "));
-    Serial.flush();
-    boolean intSet = false;
-    long utimeout = millis() + 10000;
-    while (intSet == false && millis() < utimeout) {
-      getinput();
-      if (indata != 10 && indata != 15 && indata != 20 && indata != 30 && indata != 60) {
-        Serial.print(F("Invalid interval. Enter measurement interval (10, 15, 20, 30, or 60): "));
-        Serial.flush();
-      }
-
-      // CODE BELOW NEEDS TESTING
-      /* else if(indata == 15 && numNodes > 2){   // 08Jan21: numNodes limit for 10 minutes?
-        Serial.println(F("ERROR: maximum 2 Nodes at 15 minute interval"));
-        Serial.println(F("Please enter another measurement interval: "));
-        } else if (indata == 20 && numNodes > 4){
-        Serial.println(F("ERROR: maximum 4 Nodes at 20 minute interval"));
-        Serial.println(F("Please enter another measurement interval: "));
-        } */
-
-      else {
-        intSet = true;
-        interval = indata;
-        EEPROM.update(EEPROM_ALRM1_INT, interval);
-        delay(20);
-        return true;
-      }
+void measureInt() {
+  Serial.print(F("Enter measurement interval (10, 15, 20, 30, or 60 mins): "));
+  Serial.flush();
+  boolean intSet = false;
+  long utimeout = millis() + 10000;
+  while (intSet == false && millis() < utimeout) {
+    getinput();
+    if (indata != 10 && indata != 15 && indata != 20 && indata != 30 && indata != 60) {
+      Serial.print(F("Invalid interval. Enter measurement interval (10, 15, 20, 30, or 60): "));
+      Serial.flush();
     }
-  } else if (uploadInt == 1) {
-    Serial.print(F("Enter measurement interval (10, 15, 20, 30, or 60 mins): "));
-    Serial.flush();
-    boolean intSet = false;
-    while (intSet == false) {
-      getinput();
-      if (indata != 10 && indata != 15 && indata != 20 && indata != 30 && indata != 60) {
-        Serial.print(F("Invalid interval. Enter measurement interval (10, 15, 20, 30, or 60): "));
-        Serial.flush();
-      }
-      // CODE BELOW NEEDS TESTING
-      /*
-        else if(indata == 10 && numNodes > 3){
-        Serial.println(F("ERROR: maximum 3 Nodes at 10 minute interval"));
-        Serial.println(F("Please enter another measurement interval: "));
-        } else if(indata == 15 && numNodes > 8){
-        Serial.println(F("ERROR: maximum 8 Nodes at 15 minute interval"));
-        Serial.println(F("Please enter another measurement interval: "));
-        } */
-      else {
-        intSet = true;
-        interval = indata;
-        EEPROM.update(EEPROM_ALRM1_INT, interval);
-        return true;
-      }
+    else {
+      intSet = true;
+      interval = indata;
+      EEPROM.update(EEPROM_ALRM1_INT, interval);
+      delay(20);
     }
-  }
-  else {  // uploadInt != 1 or 4
-    return false;
-  }
+  } 
 }
 
 void NISTsync() {

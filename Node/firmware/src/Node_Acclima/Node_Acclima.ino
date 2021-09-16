@@ -26,7 +26,7 @@
    John Anderson, Acclima Inc.
    David Anderson, Acclima Inc.
 
-   Last edited: August 31, 2021
+   Last edited: September 16, 2021
 
    - Version History -
    Version 2020.05.06 fixes issue with data string when a sensor is unresponsive
@@ -69,7 +69,8 @@
                       Add print debug statements option
                       Add yesNo()
    Version 2021.08.03 Add lowInitBatt flag, skips initial fieldSync if battV is too low and come back to it later
-   Version 2021.08.31 Add option to only print newest logs since last print                  
+   Version 2021.08.31 Add option to only print newest logs since last print   
+   Version 2021.09.16 Add ifdefs for remove_PEC, include_convertVWC, include_getTT, include_latlng               
                        
 */
 
@@ -105,14 +106,16 @@
 #define pin_solarShort      A4
 #define SOLAR_CALIB         1.0                      // This will become a EEPROM constant that is set during factory config – for now just use 1.0
 #define MAX_SENSORS         16
-//#define getTT                                        // if defined, queries TDRs for travel time
-//  #define keepPEC                                      // if defined, keeps pore water EC in data string, if not, replaces PEC with travel time
 #define ADC_MAXVALUE        1023
-//#define volumeVWC                                    // if defined, will convert VWC from % to Volume/Volume
+
+#define include_getTT                                // if defined, queries Acclima TDRs for travel time
+#define remove_PEC                                   // if defined, removes pore water EC from data string and replaces it with travel time (for Acclima TDRs)
+#define include_convertVWC                           // if defined, will convert VWC from % to Volume/Volume (for Acclima TDRs)
+#define include_latlng
 
 //------------- Declare Variables ---------------------------------
 
-char VERSION[] = "V2021.08.31";
+char VERSION[] = "V2021.09.16";
 
 //-----*** Identifiers ***-----
 
@@ -1207,16 +1210,7 @@ void listenRespond() {
 
 void readSensors() {
 
-  //  Serial.println();
-  //  Serial.println("Measuring sensors...");
-  //  Serial.println();
-
-  //  // Add timestamp before sensor data!!!
-  ////  memset(allData,0,sizeof(allData));
   allData = "";
-  //  char timestamp[] = "timestamp~";
-  ////  strcpy(allData,timestamp);
-  //  allData += timestamp; delay(30);
 
   SDI12port.begin();
   delay(500);
@@ -1392,8 +1386,10 @@ void getResponseSDI12(char index) {
       
       if (strcmp(allSensors[rowNum].type, "TR31") == 0) { // if a TDR     
 //        Serial.println("TDR!");
-        getTimeData(rowNum,index,response,len);
-        tdr = true; delay(20);
+        #ifdef include_getTT
+          getTimeData(rowNum,index,response,len);
+        #endif
+          tdr = true; delay(20);
       } // end if sensor is a TDR
       else {
 //        strcpy(allSensors[rowNum].data, response);
@@ -1490,168 +1486,170 @@ void getTimeData(byte r, char a, char data[80], byte l){
     response[j] = data[j];
   }
 //  Serial.println(response);
-  
-  char zeroVWC[] = "0.0";
-        char respVWC[4];
-        for (byte i = 0; i < 3; i++) {
-          respVWC[i] = response[i + 1];
-        } respVWC[3] = 0;
-        if (strcmp(zeroVWC, respVWC) != 0) {
-          //          Serial.print("Converting VWC...");
-          byte x; // = 0;  // location of first decimal point in array
-          x = strchr(response,'.') - response;
+
+  #ifdef include_convertVWC
+    char zeroVWC[] = "0.0";
+    char respVWC[4];
+    for (byte i = 0; i < 3; i++) {
+      respVWC[i] = response[i + 1];
+    } respVWC[3] = 0;
+    if (strcmp(zeroVWC, respVWC) != 0) {
+      //          Serial.print("Converting VWC...");
+      byte x; // = 0;  // location of first decimal point in array
+      x = strchr(response,'.') - response;
 //          Serial.print("x = ");
 //          Serial.println(x);
 
-          // shift values
-          if (x == 2) { // single digit VWC
-            char temp[sizeof(response)];
-            temp[0] = response[0];
-            temp[1] = '.';
-            temp[2] = '0';
-            temp[3] = response[1];
-            temp[4] = response[3];
-            for (byte i = 4; i < sizeof(response); i++) {
-              temp[i + 1] = response[i];
-            }
+      // shift values
+      if (x == 2) { // single digit VWC
+        char temp[sizeof(response)];
+        temp[0] = response[0];
+        temp[1] = '.';
+        temp[2] = '0';
+        temp[3] = response[1];
+        temp[4] = response[3];
+        for (byte i = 4; i < sizeof(response); i++) {
+          temp[i + 1] = response[i];
+        }
 //            Serial.println(temp);
-            for (byte i = 0; i < sizeof(response); i++) {
-              response[i] = temp[i];
-            }
-            response[sizeof(response)] = 0;
-          }
-          else {    // double-digit VWC           
-            byte j = 0;
-            for (j; j < 2; j++) {
-              response[x - j] = response[x - (j + 1)];
-            }
-            response[x - j] = '.';
-          }
-          response[sizeof(response)] = 0;
+        for (byte i = 0; i < sizeof(response); i++) {
+          response[i] = temp[i];
         }
+        response[sizeof(response)] = 0;
+      }
+      else {    // double-digit VWC           
+        byte j = 0;
+        for (j; j < 2; j++) {
+          response[x - j] = response[x - (j + 1)];
+        }
+        response[x - j] = '.';
+      }
+      response[sizeof(response)] = 0;
+    }
 //        Serial.println();
-        if (debug){
-          Serial.print("VWC conversion: ");
-          Serial.println(response);
-          Serial.print("pEC removed: ");
-        }
-        
-        char * lastTilde = strrchr(response, '~');
-        byte no_pEC = (lastTilde - response + 2);
-        char removed_pec[no_pEC];
-        
-        for(byte i = 0; i < no_pEC; i++){
-          removed_pec[i] = response[i];
-        } 
-        removed_pec[no_pEC - 1] = 0;
+    if (debug){
+      Serial.print("VWC conversion: ");
+      Serial.println(response);     
+    }
+  #endif
 
-        if (debug) Serial.println(removed_pec);
-        SDI12port.clearBuffer();
-        delay(20);
-        //#endif
+  #ifdef remove_PEC
+    Serial.print("pEC removed: ");
+    char * lastTilde = strrchr(response, '~');
+    byte no_pEC = (lastTilde - response + 2);
+    char removed_pec[no_pEC];
+    
+    for(byte i = 0; i < no_pEC; i++){
+      removed_pec[i] = response[i];
+    } 
+    removed_pec[no_pEC - 1] = 0;
+
+    if (debug) Serial.println(removed_pec);
+    SDI12port.clearBuffer();
+    delay(20);
+  #endif
    
-        //--- get time data from TDR
+  //--- get time data from TDR
 
-        char sendTT[5];
-        sendTT[0] = index;
-        sendTT[1] = 0;
-        char sndTT[] = "D1!";
-        strcat(sendTT, sndTT);
-        //          Serial.println(sendTT);
+  char sendTT[5];
+  sendTT[0] = index;
+  sendTT[1] = 0;
+  char sndTT[] = "D1!";
+  strcat(sendTT, sndTT);
+  //          Serial.println(sendTT);
 
-        SDI12port.sendCommand(sendTT);
-        delay(500);
+  SDI12port.sendCommand(sendTT);
+  delay(500);
 
-        byte incomingTT = SDI12port.available();
-        char respTT[incomingTT - 1];   // replace trailing CR with NULL and remove LF
-        
-        if (incomingTT > 5) {  
-          for (byte i = 0; i < (incomingTT - 1); i++) {
-            char c = SDI12port.read(); 
+  byte incomingTT = SDI12port.available();
+  char respTT[incomingTT - 1];   // replace trailing CR with NULL and remove LF
+  
+  if (incomingTT > 5) {  
+    for (byte i = 0; i < (incomingTT - 1); i++) {
+      char c = SDI12port.read(); 
 //            Serial.print(c);
-            if (c != 13 && c != 10 && c != '+' && c != '-') {
-              respTT[i] = c;         // store c in array if not at last byte
-              delay(15);
-            }
-            else if (c == 13) {
-              respTT[i] = 0;
-            }
-            else if (c == '+' || c == '-') {
-              respTT[i] = sep; //delay(15);
-            } 
-          }    // end for loop
-        }
-        if (debug){
-          Serial.print("Travel time resp: ");
-          Serial.println(respTT);
-        }
-        
-        //--- extract  travel time (second to last output)
-        
-        char * TTlastTilde = strrchr(respTT, '~');
-        byte lastTpos = TTlastTilde - respTT;       // position of last tilde in respTT
-        byte lenTT = 0;                             // length of char array needed for travel time
-        byte lastdigit;                             // position in respTT array where tt begins
-        for (byte i = 1; i < lastTpos; i++) {
-          if (respTT[lastTpos - i] != '~') {
-            lastdigit = lastTpos - i;
-            lenTT++;
-          } else {
-            break;
-          }
-        }
+      if (c != 13 && c != 10 && c != '+' && c != '-') {
+        respTT[i] = c;         // store c in array if not at last byte
+        delay(15);
+      }
+      else if (c == 13) {
+        respTT[i] = 0;
+      }
+      else if (c == '+' || c == '-') {
+        respTT[i] = sep; //delay(15);
+      } 
+    }    // end for loop
+  }
+  if (debug){
+    Serial.print("Travel time resp: ");
+    Serial.println(respTT);
+  }
+  
+  //--- extract  travel time (second to last output)
+  
+  char * TTlastTilde = strrchr(respTT, '~');
+  byte lastTpos = TTlastTilde - respTT;       // position of last tilde in respTT
+  byte lenTT = 0;                             // length of char array needed for travel time
+  byte lastdigit;                             // position in respTT array where tt begins
+  for (byte i = 1; i < lastTpos; i++) {
+    if (respTT[lastTpos - i] != '~') {
+      lastdigit = lastTpos - i;
+      lenTT++;
+    } else {
+      break;
+    }
+  }
 
-        char travelT[lenTT + 1];                    // array for holding travel time
+  char travelT[lenTT + 1];                    // array for holding travel time
 
-        for (byte i = 0; i < lenTT; i++) {
-          travelT[i] = respTT[lastdigit + i];
-        }
-        travelT[lenTT] = 0; delay(100);
-        
-        if (debug){
-          Serial.print("Travel time: ");
-          Serial.println(travelT); delay(20);
-        }
-        
-        // concatenate sensor data and time data
-        char resp_TT[no_pEC + lenTT]; delay(20);       
+  for (byte i = 0; i < lenTT; i++) {
+    travelT[i] = respTT[lastdigit + i];
+  }
+  travelT[lenTT] = 0; delay(100);
+  
+  if (debug){
+    Serial.print("Travel time: ");
+    Serial.println(travelT); delay(20);
+  }
+  
+  // concatenate sensor data and time data
+  char resp_TT[no_pEC + lenTT]; delay(20);       
 //        Serial.print("sizeof(resp_TT): ");  
 //        Serial.println(sizeof(resp_TT)); 
-        
-        strcpy(resp_TT, removed_pec); delay(50);
-        resp_TT[0] = '~'; delay(50);       
-        strcat(resp_TT, travelT); delay(50);
-        
-        if (debug){
-          Serial.print("resp_TT: ");        
-          Serial.println(resp_TT);
-        }
+  
+  strcpy(resp_TT, removed_pec); delay(50);
+  resp_TT[0] = '~'; delay(50);       
+  strcat(resp_TT, travelT); delay(50);
+  
+  if (debug){
+    Serial.print("resp_TT: ");        
+    Serial.println(resp_TT);
+  }
 //        Serial.print("allSensors[rowNum].depth: ");
 //        Serial.println(allSensors[rowNum].depth); delay(100);
 
-        if (rowNum != sensorTot - 1) {
-          if(allSensors[rowNum].depth[0] != 0){        
-            sprintf(buf, "%s~%s%s~", allSensors[rowNum].ID, allSensors[rowNum].depth, resp_TT);
-          } else {
-            char dpth[] = "-999";
-            sprintf(buf, "%s~%s%s~", allSensors[rowNum].ID, dpth, resp_TT);
-          }
-        } else {
-          if(allSensors[rowNum].depth[0] != 0){        
-            sprintf(buf, "%s~%s%s", allSensors[rowNum].ID, allSensors[rowNum].depth, resp_TT);
-          } else {
-            char dpth[] = "-999";
-            sprintf(buf, "%s~%s%s", allSensors[rowNum].ID, dpth, resp_TT);
-          }
-        }
-        //#endif  // end ifdef getTT
-        if (debug) Serial.println(buf);
-
-        delay(100);
-        allData += buf; delay(50);
-//        return true;
-
+  if (rowNum != sensorTot - 1) {
+    if(allSensors[rowNum].depth[0] != 0){        
+      sprintf(buf, "%s~%s%s~", allSensors[rowNum].ID, allSensors[rowNum].depth, resp_TT);
+    } else {
+      char dpth[] = "-999";
+      sprintf(buf, "%s~%s%s~", allSensors[rowNum].ID, dpth, resp_TT);
+    }
+  } else {
+    if(allSensors[rowNum].depth[0] != 0){        
+      sprintf(buf, "%s~%s%s", allSensors[rowNum].ID, allSensors[rowNum].depth, resp_TT);
+    } else {
+      char dpth[] = "-999";
+      sprintf(buf, "%s~%s%s", allSensors[rowNum].ID, dpth, resp_TT);
+    }
   }
+
+  if (debug) Serial.println(buf);
+
+  delay(100);
+  allData += buf; delay(50);
+
+}
 
 //===================================================================================================
 
@@ -1749,10 +1747,12 @@ void Timestamp() {      // compile timestamp
   timestamp += sep;
   timestamp += projectID;
   timestamp += sep;
-  timestamp += lat;
-  timestamp += ',';
-  timestamp += lng;
-  timestamp += sep;
+  #ifdef include_latlng
+    timestamp += lat;
+    timestamp += ',';
+    timestamp += lng;
+    timestamp += sep;
+  #endif
   timestamp += serNum;
   timestamp += sep;
   timestamp += battV;
@@ -2182,10 +2182,12 @@ void menu()
   Serial.println(LoRaFREQ);
   Serial.print(F("Project ID: "));
   Serial.println(projectID);
-  Serial.print(F("Lat/long: "));
-  Serial.print(lat);
-  Serial.print(", ");
-  Serial.println(lng);
+  #ifdef include_latlng
+    Serial.print(F("Lat/long: "));
+    Serial.print(lat);
+    Serial.print(", ");
+    Serial.println(lng);
+  #endif
   Serial.print(F("Radio ID: "));
   Serial.println(radioID);
   Serial.print(F("Gateway Radio ID: "));
@@ -2237,7 +2239,9 @@ void menu()
   Serial.println(F("   d  <--  Enter sensor depths"));              // 4-Mar-2020
   Serial.println(F("   c  <--  Set clock"));                        // change month, day, year, hour, minute
   Serial.println(F("   i  <--  Enter project ID"));                 // enter project ID
-  Serial.println(F("   l  <--  Enter or erase Lat/Long values"));
+  #ifdef include_latlng
+    Serial.println(F("   l  <--  Enter or erase Lat/Long values"));
+  #endif
   Serial.println(F("   g  <--  Enter Gateway radio ID"));
   Serial.println(F("   r  <--  Change Node radio ID"));
   Serial.println(F("   m  <--  Set measurement interval"));         // choose how often to take measurements from sensors
@@ -2296,7 +2300,7 @@ void menu()
         SDI12Scan();
       }
       
-      Serial.println(F("Enter sensor depth in cm. Use '+' or '-' to indicate above or below soil surface:"));
+      Serial.println(F("Enter sensor depths. Use '+' or '-' to indicate above or below soil surface:"));
 
       for (byte i = 0; i < sensorTot; i++) {
         depths[i][0] = allSensors[i].addr;
@@ -2635,7 +2639,7 @@ void menu()
 //-------------- Decode config string --------------------------------
 
 void decodeConfig(char config_string[230]) {
-  /* Config string format: projectID,sernum,radio ID,gateway ID,measInt,sensorTot,addr1,depth1,...,lat,long 
+  /* Config string format: projectID,sernum,radio ID,gateway ID,measInt,sensorTot,addr1,depth1,...(,lat,long)
     ** gateway ID == '0' --> no gateway
   */
   clearDepths();  // 28May2020
@@ -2782,7 +2786,12 @@ void decodeConfig(char config_string[230]) {
       //     Serial.print(commaPos[firstComma + L]);
       //     Serial.print(x);
 
-      if (r == (sensorNum - 1) && R != (commaTot - 5)) {    // 9/24/2020: check for correct number of sensors first
+      byte sensorNumCheck;
+      #ifdef include_latlng sensorNumCheck = 5;
+      #else sensorNumCheck = 3;
+      #endif 
+      
+      if (r == (sensorNum - 1) && R != (commaTot - sensorNumCheck)) {    // 9/24/2020: check for correct number of sensors first
         //      Serial.println(R);
         //      Serial.println(commaTot);
         Serial.println("ERROR: Incorrect number of sensor depths");
@@ -2829,83 +2838,85 @@ void decodeConfig(char config_string[230]) {
       }
     }
 
-    //--- get lat
-    byte lastComma = commaTot - 1;
-
-    for (byte i = 0; i < 12; i++) {
-      char a = configN[commaPos[lastComma - 2] + i + 1];
-      if (a != ',') {
-        lat[i] = a;
-      } else {
-        lat[i] = 0;
-        break;
+    #ifdef include_latlng
+      //--- get lat
+      byte lastComma = commaTot - 1;
+  
+      for (byte i = 0; i < 12; i++) {
+        char a = configN[commaPos[lastComma - 2] + i + 1];
+        if (a != ',') {
+          lat[i] = a;
+        } else {
+          lat[i] = 0;
+          break;
+        }
       }
-    }
-    // count # digits after decimal
-    byte digits = 0;
-    byte decLoc = 0;
-    for (byte j = 0; j < 12; j++) {
-      if (lat[j] == '.') {
-        decLoc = j;
-        break;
+      // count # digits after decimal
+      byte digits = 0;
+      byte decLoc = 0;
+      for (byte j = 0; j < 12; j++) {
+        if (lat[j] == '.') {
+          decLoc = j;
+          break;
+        }
       }
-    }
-    for (byte i = 1; i < 7; i++) {
-      if (lat[decLoc + i] >= '0') {
-        digits++;
+      for (byte i = 1; i < 7; i++) {
+        if (lat[decLoc + i] >= '0') {
+          digits++;
+        }
       }
-    }
-
-
-    if (digits != 6 || (lat[0] != '-' && (lat[2] != '.' && lat[1] != '.' && lat[3] != '.')) || (lat[0] == '-' && (lat[3] != '.' && lat[2] != '.' && lat[4] != '.'))) {
-      Serial.println(F("ERROR: Latitude incorrect!"));
-      lat[0] = '-';
-      for (byte i = 1; i < 12; i++) {
-        lat[i] = '9';
+  
+  
+      if (digits != 6 || (lat[0] != '-' && (lat[2] != '.' && lat[1] != '.' && lat[3] != '.')) || (lat[0] == '-' && (lat[3] != '.' && lat[2] != '.' && lat[4] != '.'))) {
+        Serial.println(F("ERROR: Latitude incorrect!"));
+        lat[0] = '-';
+        for (byte i = 1; i < 12; i++) {
+          lat[i] = '9';
+        }
+        lat[11] = 0;
       }
-      lat[11] = 0;
-    }
-
-    Serial.print("Lat: ");
-    Serial.println(lat);
-
-    //--- get long
-
-    for (byte i = 0; i < 12; i++) {
-      char a = configN[commaPos[lastComma - 1] + i + 1];
-      if (a > 44 && a < 58) {
-        lng[i] = a;
-      } else {
-        lng[i] = 0;
-        break;
+  
+      Serial.print("Lat: ");
+      Serial.println(lat);
+  
+      //--- get long
+  
+      for (byte i = 0; i < 12; i++) {
+        char a = configN[commaPos[lastComma - 1] + i + 1];
+        if (a > 44 && a < 58) {
+          lng[i] = a;
+        } else {
+          lng[i] = 0;
+          break;
+        }
       }
-    }
-    // count # digits after decimal
-    digits = 0;
-    decLoc = 0;
-    for (byte j = 0; j < 12; j++) {
-      if (lng[j] == '.') {
-        decLoc = j;
-        break;
+      // count # digits after decimal
+      digits = 0;
+      decLoc = 0;
+      for (byte j = 0; j < 12; j++) {
+        if (lng[j] == '.') {
+          decLoc = j;
+          break;
+        }
       }
-    }
-    for (byte i = 1; i < 7; i++) {
-      if (lng[decLoc + i] >= '0') {
-        digits++;
+      for (byte i = 1; i < 7; i++) {
+        if (lng[decLoc + i] >= '0') {
+          digits++;
+        }
       }
-    }
-
-    if (digits != 6 || (lng[0] != '-' && (lng[2] != '.' && lng[1] != '.' && lng[3] != '.')) || (lng[0] == '-' && (lng[3] != '.' && lng[2] != '.' && lng[4] != '.'))) {
-      Serial.println(F("ERROR: Longitude incorrect!"));
-      lng[0] = '-';
-      for (byte i = 1; i < 12; i++) {
-        lng[i] = '9';
+  
+      if (digits != 6 || (lng[0] != '-' && (lng[2] != '.' && lng[1] != '.' && lng[3] != '.')) || (lng[0] == '-' && (lng[3] != '.' && lng[2] != '.' && lng[4] != '.'))) {
+        Serial.println(F("ERROR: Longitude incorrect!"));
+        lng[0] = '-';
+        for (byte i = 1; i < 12; i++) {
+          lng[i] = '9';
+        }
+        lng[11] = 0;
       }
-      lng[11] = 0;
-    }
-
-    Serial.print("Long: ");
-    Serial.println(lng);
+  
+      Serial.print("Long: ");
+      Serial.println(lng);
+    #endif
 
   }
 
@@ -2926,8 +2937,10 @@ void decodeConfig(char config_string[230]) {
     LoRa.setThisAddress(radioID);
     EEPROM.update(EEPROM_ALRM1_INT, interval);
     EEPROM.put(EEPROM_DEPTHS, depths);
-    EEPROM.put(EEPROM_LAT, lat);
-    EEPROM.put(EEPROM_LNG, lng);
+    #ifdef include_latlng
+      EEPROM.put(EEPROM_LAT, lat);
+      EEPROM.put(EEPROM_LNG, lng);
+    #endif
   }
   delay(400);   // Added 9/24/2020
 //  depthToStruct();
