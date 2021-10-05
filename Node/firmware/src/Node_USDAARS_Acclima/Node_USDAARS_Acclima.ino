@@ -2251,7 +2251,7 @@ void menu()
   //  Serial.println(F("   S  <--  Synchronize Gateway & Node clocks"));  // get time from Gateway, update clock
   Serial.println(F("   p  <--  Print data to screen"));         // print data to Serial Monitor
   Serial.println(F("   e  <--  Erase all data"));                   // delete all data from Flash
-  Serial.println(F("   b  <--  Turn debug statements on/off"));    
+  Serial.println(F("   o  <--  Turn debug statements on/off"));    
   Serial.println(F("   x  <--  Exit menu"));                        // exit
   Serial.print(F("Enter choice: "));
   byte   menuinput;                                    // user input to menu prompt
@@ -2568,7 +2568,7 @@ void menu()
       menu();
       break;
 
-    case 'b': case 'B':          // ------ b - Turn debug on/off ----------------------------------------------
+    case 'o': case 'O':          // ------ o - Turn debug on/off ----------------------------------------------
       if(debug){
         Serial.println(F("Turn debug statements off? (y/n): "));
         toDo = yesNo();
