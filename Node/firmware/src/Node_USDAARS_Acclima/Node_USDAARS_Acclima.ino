@@ -70,7 +70,8 @@
                       Add yesNo()
    Version 2021.08.03 Add lowInitBatt flag, skips initial fieldSync if battV is too low and come back to it later
    Version 2021.08.31 Add option to only print newest logs since last print   
-   Version 2021.09.16 Add ifdefs for remove_PEC, include_convertVWC, include_getTT, include_latlng               
+   Version 2021.09.16 Add ifdefs for remove_PEC, include_convertVWC, include_getTT, include_latlng  
+   Version 2021.10.27 Add check for alternate Flash chip (Winbond W25Q64JV) Jedec ID = 0xEF40               
                        
 */
 
@@ -115,7 +116,7 @@
 
 //------------- Declare Variables ---------------------------------
 
-char VERSION[] = "V2021.09.16";
+char VERSION[] = "V2021.10.27";
 
 //-----*** Identifiers ***-----
 
@@ -313,7 +314,7 @@ void setup() {
 
   // Flash
 
-  if (!ft.init(pin_Flash_CS, 0xC228)) {
+  if (!ft.init(pin_Flash_CS, 0xC228) || !ft.init(pin_Flash_CS, 0xEF40)) {   // add check for alternate Flash chip (Winbond W25Q64JV)
     Serial.println("Flash failed to initialize!");
     Serial.println("Erasing flash. This may take a few minutes...");
     ft.chipErase();
