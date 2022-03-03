@@ -1,4 +1,4 @@
-/*ARS Node for use with Cellular Gateway
+/*USDA ARS Node for use with Cellular Gateway
 
     Main Components:
       - ATMega1284P with MoteinoMEGA core
@@ -26,7 +26,7 @@
    John Anderson, Acclima Inc.
    David Anderson, Acclima Inc.
 
-   Last edited: September 16, 2021
+   Last edited: March 3, 2022
 
    - Version History -
    Version 2020.05.06 fixes issue with data string when a sensor is unresponsive
@@ -72,7 +72,11 @@
    Version 2021.08.31 Add option to only print newest logs since last print   
    Version 2021.09.16 Add ifdefs for remove_PEC, include_convertVWC, include_getTT, include_latlng  
    Version 2021.10.27 Add check for alternate Flash chip (Winbond W25Q64JV) Jedec ID = 0xEF40               
-                       
+   Version 2022.01.19 Edit check for alternate flash chip, print jedec ID (edits to FlashTools.cpp and setup)
+                      Add flash_wake to saveData() (why new flash chip is stalling?)
+                      Fix flash_wake in FlashTools.cpp/h                   
+                      Change menu routine to show/hide configuration options
+                                              
 */
 
 //===================================================================================================
@@ -116,7 +120,7 @@
 
 //------------- Declare Variables ---------------------------------
 
-char VERSION[] = "V2021.10.27";
+char VERSION[] = "V2022.01.19";
 
 //-----*** Identifiers ***-----
 
@@ -183,6 +187,7 @@ char  charInput[200];
 unsigned long serNum;               // serial number
 bool skipScan = false;              // tracks if sensor scan was skipped by user
 bool debug = false;
+bool viewConfig = false;            // flag to show/hide configuration menu
 
 //-----*** Data Variables ***-----
 
@@ -314,7 +319,7 @@ void setup() {
 
   // Flash
 
-  if (!ft.init(pin_Flash_CS, 0xC228) || !ft.init(pin_Flash_CS, 0xEF40)) {   // add check for alternate Flash chip (Winbond W25Q64JV)
+  if (!ft.init(pin_Flash_CS, 0xC228) && !ft.init(pin_Flash_CS, 0xEF40)) {   // add check for alternate Flash chip (Winbond W25Q64JV)
     Serial.println("Flash failed to initialize!");
     Serial.println("Erasing flash. This may take a few minutes...");
     ft.chipErase();
@@ -1140,8 +1145,8 @@ void listenRespond() {
   
   if (duringInit) {
     timeToWait = timeSync - (fieldSyncStop - fieldSyncStart) + 1200000; // 15May20 add 20 minutes
-    Serial.print("timeToWait = ");
-    Serial.println(timeToWait);
+//    Serial.print("timeToWait = ");
+//    Serial.println(timeToWait);
   } else if (numMissed == 3){    
     long int_mSecs = (interval + 1) * 60000;
     timeToWait = int_mSecs;
@@ -1815,6 +1820,9 @@ void saveData() {
 
   memcpy(tmpChars, allData.c_str(), Len);
 
+  ft.flash_wake();  // added 14Dec21 to see if helps new flash chip
+  delay(30);
+
   // Call function to write log
   if (ft.writeLog(tmpChars, Len)) {
     if(debug){
@@ -2235,37 +2243,41 @@ void menu()
 
   Serial.println();
 
-  Serial.println(F("Menu options: "));
-  Serial.println(F("   0  <--  Enter configuration string"));       // NEW 24-Feb-2020: enter variables all at once
-  Serial.println(F("   d  <--  Enter sensor depths"));              // 4-Mar-2020
-  Serial.println(F("   c  <--  Set clock"));                        // change month, day, year, hour, minute
-  Serial.println(F("   i  <--  Enter project ID"));                 // enter project ID
-  #ifdef include_latlng
-    Serial.println(F("   l  <--  Enter or erase Lat/Long values"));
-  #endif
-  Serial.println(F("   g  <--  Enter Gateway radio ID"));
-  Serial.println(F("   r  <--  Change Node radio ID"));
-  Serial.println(F("   m  <--  Set measurement interval"));         // choose how often to take measurements from sensors
+  Serial.println(F("Sensor menu: "));
   Serial.println(F("   n  <--  Scan for devices on SDI-12 bus"));   // added 01/13/2020
   Serial.println(F("   a  <--  Change SDI-12 sensor addresses"));
+  Serial.println(F("   d  <--  Enter sensor depths"));              // 4-Mar-2020
   Serial.println(F("   t  <--  Test sensors"));                     // takes three measurements from sensors
-  //  Serial.println(F("   S  <--  Synchronize Gateway & Node clocks"));  // get time from Gateway, update clock
-  Serial.println(F("   p  <--  Print data to screen"));         // print data to Serial Monitor
-  Serial.println(F("   e  <--  Erase all data"));                   // delete all data from Flash
-  Serial.println(F("   o  <--  Turn debug statements on/off"));    
+  Serial.println(F("   2  <--  View configuration options"));
+  if (viewConfig){
+    Serial.println();
+    Serial.println(F("Configuration Options:"));
+    Serial.println(F("   0  <--  Enter configuration string"));       // NEW 24-Feb-2020: enter variables all at once   
+    Serial.println(F("   c  <--  Set clock"));                        // change month, day, year, hour, minute
+    Serial.println(F("   i  <--  Enter project ID"));                 // enter project ID
+    Serial.println(F("   l  <--  Enter or erase Lat/Long values"));
+    Serial.println(F("   g  <--  Enter Gateway radio ID"));
+    Serial.println(F("   r  <--  Change Node radio ID"));
+    Serial.println(F("   m  <--  Set measurement interval"));         // choose how often to take measurements from sensors
+   //  Serial.println(F("   S  <--  Synchronize Gateway & Node clocks"));  // get time from Gateway, update clock
+    Serial.println(F("   p  <--  Print data to screen"));         // print data to Serial Monitor
+    Serial.println(F("   b  <--  Turn debug statements on/off"));  
+    Serial.println(F("   e  <--  Erase all data"));                   // delete all data from Flash
+    Serial.println(F("   2  <--  Hide configuration options"));
+  }  
   Serial.println(F("   x  <--  Exit menu"));                        // exit
   Serial.print(F("Enter choice: "));
   byte   menuinput;                                    // user input to menu prompt
-  long  timeout;                                      // length of time to wait for user
+  long  timeout;                                       // length of time to wait for user
 
-  timeout = millis(); // + 30000;                                      // wait 30 secs for input, edited 01/13/2020
-  while ((millis() - timeout) < 30000)
+  timeout = millis();                                  // wait 60 secs for input, edited 01/13/2020
+  while ((millis() - timeout) < 60000)
   {
     menuinput = 120;
-    if (Serial.available() > 0)                                    // if something typed, go to menu
+    if (Serial.available() > 0)                        // if something typed, go to menu
     {
-//      userinput = true;                        // added 01/13/2020
-      menuinput = Serial.read();               // get user input
+//      userinput = true;                              // added 01/13/2020
+      menuinput = Serial.read();                       // get user input
       Serial.println(char(menuinput));
       while (Serial.available() > 0)
       {
@@ -2293,6 +2305,21 @@ void menu()
       menu();
       break;
 
+    case '2':                   // ------ 2 - Show/hide config options ---------------------------------------------
+      delay(500);
+      if (!viewConfig){
+        Serial.println("Activating configuration options...");
+        viewConfig = true;
+      } else {
+        Serial.println("Hiding configuration options...");
+        viewConfig = false;
+      }
+      Serial.println();
+      delay(1000);
+      
+      menu();
+      break; 
+      
     case 100: case 68:           // ------ d - Enter sensor depths ---------------------------------------------
       clearDepths();    // 28May2020
 
@@ -2569,7 +2596,7 @@ void menu()
       menu();
       break;
 
-    case 'o': case 'O':          // ------ o - Turn debug on/off ----------------------------------------------
+    case 'b': case 'B':          // ------ b - Turn debug on/off ----------------------------------------------
       if(debug){
         Serial.println(F("Turn debug statements off? (y/n): "));
         toDo = yesNo();
@@ -2788,7 +2815,8 @@ void decodeConfig(char config_string[230]) {
       //     Serial.print(x);
 
       byte sensorNumCheck;
-      #ifdef include_latlng sensorNumCheck = 5;
+      #ifdef include_latlng 
+        sensorNumCheck = 5;
       #else sensorNumCheck = 3;
       #endif 
       
