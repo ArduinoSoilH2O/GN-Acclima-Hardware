@@ -2248,7 +2248,7 @@ void menu()
   Serial.println(F("   a  <--  Change SDI-12 sensor addresses"));
   Serial.println(F("   d  <--  Enter sensor depths"));              // 4-Mar-2020
   Serial.println(F("   t  <--  Test sensors"));                     // takes three measurements from sensors
-  Serial.println(F("   2  <--  View configuration options"));
+  Serial.println(F("   2  <--  Show configuration options"));
   if (viewConfig){
     Serial.println();
     Serial.println(F("Configuration Options:"));

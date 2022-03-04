@@ -2611,7 +2611,7 @@ void MainMenu()
   Serial.println(F("  p  <--  Print node data to screen"));
   Serial.println(F("  r  <--  Receiver Mode on/off"));
   Serial.println(F("  f  <--  See list of saved files")); 
-  Serial.println(F("  o  <--  Debug statements on/off"));
+  Serial.println(F("  b  <--  Debug statements on/off"));
   if(!forceRecv) Serial.println(F("  4  <--  Clear forbidden networks list"));
   if(!viewConfig){ 
     Serial.println(F("  2  <--  Show configuration options"));
